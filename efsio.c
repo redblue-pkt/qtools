@@ -3,101 +3,100 @@
 #include "efsio.h"
 
 //========================================================
-//  Процедуры работы  файлами EFS 
-//  через диагностический интерфейс
+// Procedures for working with EFS files
+// through the diagnostic interface
 //========================================================
 
-// Хранилище последнего кода ошибки
+// Storage of the last error code
 static int efs_errno;
 
-// Признак работы с альтернативной EFS
-unsigned int efs_altflag=0;   // флаг альтернативной EFS
+// Flag indicating work with an alternative EFS
+unsigned int efs_altflag = 0;   // flag for alternative EFS
 
 //****************************************************
-//* Получение errno
+//* Get errno
 //****************************************************
 int efs_get_errno() {
   return efs_errno;
-}  
+}
 
 //****************************************************
-//* Установка альтернативного флга
+//* Set alternative flag
 //****************************************************
 void set_altflag(int val) {
- efs_altflag=val;
-} 
+ efs_altflag = val;
+}
 
 //****************************************************
-//* Отправка EFS-команды
+//* Send EFS command
 //
-// cmd - код команды EFS_DIAG_*
-// reqbuf - структура параметров команды,
-// reqlen - длина структуры параметров
-// respbuf - структура ответа
+// cmd - EFS_DIAG_* command code
+// reqbuf - command parameters structure
+// reqlen - length of the parameters structure
+// respbuf - response structure
 //
-// возвращает длину ответа, или -1 при ошибке
+// returns the length of the response, or -1 on error
 //****************************************************
-int send_efs_cmd(int cmd,void* reqbuf,int reqlen, void* respbuf) {
+int send_efs_cmd(int cmd, void* reqbuf, int reqlen, void* respbuf) {
 
-char cmdbuf[200]={0x4b, 0x13,0,0};
+char cmdbuf[200] = {0x4b, 0x13, 0, 0};
 int iolen;
 char iobuf[4096];
 
-cmdbuf[2]=cmd;
-if (efs_altflag) cmdbuf[1]=0x3e;
-if (reqbuf != 0) memcpy(cmdbuf+4,reqbuf,reqlen);
-iolen=send_cmd_base((unsigned char*)cmdbuf,reqlen+4, iobuf, 0);
+cmdbuf[2] = cmd;
+if (efs_altflag) cmdbuf[1] = 0x3e;
+if (reqbuf != 0) memcpy(cmdbuf + 4, reqbuf, reqlen);
+iolen = send_cmd_base((unsigned char*)cmdbuf, reqlen + 4, iobuf, 0);
 if (iolen == 0) {
-  efs_errno=9998;
+  efs_errno = 9998;
   return -1;
-}  
+}
 if (iobuf[0] != 0x4b) {
-  efs_errno=9999;
+  efs_errno = 9999;
   return -1;
-}  
+}
 //printf("\n cmd %02x:  resplen=%i\n",cmd,iolen-7);
 //dump(iobuf+4,iolen-7,0);
-memcpy(respbuf,iobuf+4,iolen-7);
-return iolen; // ошибок не было
+memcpy(respbuf, iobuf + 4, iolen - 7);
+return iolen; // no errors
 }
- 
-  
+
+
 //****************************************************
-//*   Получение блока описания файла по имени
-//* 
-//*   Возвращаемое значение - тип файла:
+//* Get file description block by name
 //*
-//* -1 - ошибка обработки команды 
-//*  0 - файл не найден
-//*  1 - файл не является каталогом
-//*  2 - каталог
+//* Return value - file type:
+//*
+//* -1 - command processing error
+//*  0 - file not found
+//*  1 - file is not a directory
+//*  2 - directory
 //*
 //****************************************************
 int efs_stat(char* filename, struct efs_filestat* fi) {
-  
+
 unsigned char cmdbuf[200];
 int iolen;
 
-memset(cmdbuf,0,200);
-strcpy(cmdbuf,filename);
-iolen=send_efs_cmd(EFS2_DIAG_STAT,cmdbuf,strlen(filename)+1,fi);
-if (iolen == -1) return -1; // ошибка приема ответа
-efs_errno=fi->diag_errno;
-if (efs_errno != 0) return 0; // файл не найден или другая какая ошибка
+memset(cmdbuf, 0, 200);
+strcpy(cmdbuf, filename);
+iolen = send_efs_cmd(EFS2_DIAG_STAT, cmdbuf, strlen(filename) + 1, fi);
+if (iolen == -1) return -1; // error receiving response
+efs_errno = fi->diag_errno;
+if (efs_errno != 0) return 0; // file not found or other error
 if (S_ISDIR(fi->mode)) return 2;
 return 1;
 }
 
 //****************************************************
-//* Открытие каталога для чтения
+//* Open directory for reading
 //*
-//* возврат:
-//*  указатель на открытый каталог
-//*  0 - ошибка
-//*  
+//* return:
+//*  directory pointer
+//*  0 - error
 //****************************************************
 int efs_opendir(char* path) {
-  
+
 unsigned char cmdbuf[200];
 int iolen;
 struct {
@@ -105,55 +104,55 @@ struct {
   int32 diag_errno;        /* Error code if error, 0 otherwise             */
 } rsp;
 
-efs_errno=0;
-memset(cmdbuf,0,200);
-strcpy(cmdbuf,path);
-iolen=send_efs_cmd(EFS2_DIAG_OPENDIR,cmdbuf,strlen(path)+1,&rsp);
+efs_errno = 0;
+memset(cmdbuf, 0, 200);
+strcpy(cmdbuf, path);
+iolen = send_efs_cmd(EFS2_DIAG_OPENDIR, cmdbuf, strlen(path) + 1, &rsp);
 if (iolen == -1) return 0;
-efs_errno=rsp.diag_errno;
+efs_errno = rsp.diag_errno;
 return rsp.dirp;
 }
 
 
 //****************************************************
-//* Закрытие каталога
+//* Close directory
 //****************************************************
 int efs_closedir(int dirp) {
-  
-int ldirp=dirp;
+
+int ldirp = dirp;
 int iolen;
 int rsp;
 
-iolen=send_efs_cmd(EFS2_DIAG_CLOSEDIR,&ldirp,4,&rsp);  
+iolen = send_efs_cmd(EFS2_DIAG_CLOSEDIR, &ldirp, 4, &rsp);
 if (iolen == -1) return -1;
-efs_errno=rsp;
+efs_errno = rsp;
 return rsp;
 }
 
 //****************************************************
-//* Чтение очередной записи каталога
+//* Read next directory entry
 //****************************************************
-int efs_readdir(int dirp, int seq,struct efs_dirent* rsp) {  
+int efs_readdir(int dirp, int seq, struct efs_dirent* rsp) {
 
-// структура запроса  
+// request structure
 struct {
   uint32 dirp;             /* Directory pointer.                           */
   int32 seqno;             /* Sequence number of directory entry to read   */
 } req;
-  
-int iolen;	
 
-req.dirp=dirp;  
-req.seqno=seq;
-iolen=send_efs_cmd(EFS2_DIAG_READDIR,&req,sizeof(req),rsp);
+int iolen;
+
+req.dirp = dirp;
+req.seqno = seq;
+iolen = send_efs_cmd(EFS2_DIAG_READDIR, &req, sizeof(req), rsp);
 if (iolen == -1) return -1;
-efs_errno=rsp->diag_errno;
+efs_errno = rsp->diag_errno;
 //printf("\n rsp: dirp=%i seq=%i entry=%i mode=%08x name=%s",rsp->dirp,rsp->seqno,rsp->entry_type,rsp->mode,rsp->name); fflush(stdout);
 return efs_errno;
 }
 
-//**************************************************   
-//* Открытие EFS-файла 
+//**************************************************
+//* Open EFS file
 //*
 //* The following oflag values are valid:
 //* O_RDONLY (open for reading mode)
@@ -175,7 +174,7 @@ struct {
   int32 mode;              /* Mode                                         */
   char  name[100];         /* Pathname (null-terminated string)            */
 } req;
-  
+
 struct {
   int32 fd;                /* File descriptor if successful, -1 otherwise  */
   int32 diag_errno;        /* Error code if error, 0 otherwise             */
@@ -183,19 +182,19 @@ struct {
 
 int iolen;
 
-strcpy(req.name,filename);
-req.oflag=oflag;
-req.mode=0777;
-iolen=send_efs_cmd(EFS2_DIAG_OPEN,&req,sizeof(req),&rsp);
+strcpy(req.name, filename);
+req.oflag = oflag;
+req.mode = 0777;
+iolen = send_efs_cmd(EFS2_DIAG_OPEN, &req, sizeof(req), &rsp);
 if (iolen == -1) return -1;
-efs_errno=rsp.diag_errno;
+efs_errno = rsp.diag_errno;
 return rsp.fd;
 }
 
-//**************************************************   
-//* Чтение EFS-файла 
+//**************************************************
+//* Read EFS file
 //*
-//**************************************************   
+//**************************************************
 int efs_read(int fd, char* buf, int size, int offset) {
 
 int iolen;
@@ -213,92 +212,92 @@ struct {
   char   data[2048];       /* The data read out                            */
 } rsp;
 
-req.fd=fd;
-req.nbyte=size;
-req.offset=offset;
-iolen=send_efs_cmd(EFS2_DIAG_READ,&req,sizeof(req),&rsp);
+req.fd = fd;
+req.nbyte = size;
+req.offset = offset;
+iolen = send_efs_cmd(EFS2_DIAG_READ, &req, sizeof(req), &rsp);
 if (iolen == -1) return -1;
-efs_errno=rsp.diag_errno;
-if (rsp.bytes_read <=0) return -1;
-memcpy(buf,rsp.data,rsp.bytes_read);
+efs_errno = rsp.diag_errno;
+if (rsp.bytes_read <= 0) return -1;
+memcpy(buf, rsp.data, rsp.bytes_read);
 return rsp.bytes_read;
 }
 
-//**************************************************   
-//* Закрытие файла
-//**************************************************   
+//**************************************************
+//* Close file
+//**************************************************
 int efs_close(int fd) {
 
-int lfd=fd;
+int lfd = fd;
 int lerrno;
 int iolen;
 
-iolen=send_efs_cmd(EFS2_DIAG_CLOSE,&lfd,4,&lerrno);
+iolen = send_efs_cmd(EFS2_DIAG_CLOSE, &lfd, 4, &lerrno);
 if (iolen == -1) return -1;
-efs_errno=lerrno;
+efs_errno = lerrno;
 return lerrno;
 }
 
 
-//**************************************************   
-//* Запись файла
-//**************************************************   
-int efs_write(int fd,char* buf, int size, int offset) {
+//**************************************************
+//* Write file
+//**************************************************
+int efs_write(int fd, char* buf, int size, int offset) {
 
 struct {
   int32 fd;                /* File descriptor                              */
   uint32 offset;           /* Offset in bytes from the origin              */
   char data[8192];        /* The data to be written                       */
-} req;					   /* Значение размера data[] - "от балды".        */
-						   /* Видимо, здесь должен быть макс. размер файла EFS */
+} req;                    /* The size of data[] - "random".               */
+                           /* Apparently, here should be the max file size of EFS */
 struct  {
   int32 fd;                /* File descriptor                              */
   uint32 offset;           /* Requested offset in bytes from the origin    */
   int32 bytes_written;     /* The number of bytes written                  */
   int32 diag_errno;        /* Error code if error, 0 otherwise             */
-} rsp;  
+} rsp;
 int iolen;
 
-req.fd=fd;
-req.offset=offset;
-memcpy(req.data,buf,size);
-iolen=send_efs_cmd(EFS2_DIAG_WRITE,&req,8+size,&rsp);
+req.fd = fd;
+req.offset = offset;
+memcpy(req.data, buf, size);
+iolen = send_efs_cmd(EFS2_DIAG_WRITE, &req, 8 + size, &rsp);
 if (iolen == -1) return -1;
-efs_errno=rsp.diag_errno;
+efs_errno = rsp.diag_errno;
 return rsp.bytes_written;
 }
 
 
 //******************************************************
-//*  Удаление каталога
+//* Delete directory
 //******************************************************
 int efs_rmdir(char* dirname) {
 
 int iolen;
 int lerrno;
 
-iolen=send_efs_cmd(EFS2_DIAG_RMDIR,dirname,strlen(dirname)+1,&lerrno);
+iolen = send_efs_cmd(EFS2_DIAG_RMDIR, dirname, strlen(dirname) + 1, &lerrno);
 if (iolen == -1) return -1;
-efs_errno=lerrno;
-return lerrno;  
+efs_errno = lerrno;
+return lerrno;
 }
 
 //******************************************************
-//*  Удаление файла по имени
+//* Delete file by name
 //******************************************************
 int efs_unlink(char* name) {
 
 int iolen;
 int lerrno;
-  
-iolen=send_efs_cmd(EFS2_DIAG_UNLINK,name,strlen(name)+1,&lerrno);
+
+iolen = send_efs_cmd(EFS2_DIAG_UNLINK, name, strlen(name) + 1, &lerrno);
 if (iolen == -1) return -1;
-efs_errno=lerrno;
-return lerrno;  
-} 
+efs_errno = lerrno;
+return lerrno;
+}
 
 //******************************************************
-//*  Создание каталога
+//* Create directory
 //******************************************************
 int efs_mkdir(char* name, int mode) {
 
@@ -309,47 +308,47 @@ struct {
   int16 mode;              /* The creation mode                            */
   char  name[100];         /* Pathname (null-terminated string)            */
 } req;
-  
-req.mode=mode;
+
+req.mode = mode;
 strcpy(req.name, name);
-iolen=send_efs_cmd(EFS2_DIAG_MKDIR,&req,strlen(name)+3,&lerrno);
+iolen = send_efs_cmd(EFS2_DIAG_MKDIR, &req, strlen(name) + 3, &lerrno);
 if (iolen == -1) return -1;
-efs_errno=lerrno;
-return lerrno;  
+efs_errno = lerrno;
+return lerrno;
 }
 
 //******************************************************
-//* Подготовка к снятию полного дампа EFS
+//* Prepare for a full EFS dump
 //******************************************************
 int efs_prep_factimage() {
-  
+
 int iolen;
 int lerrno;
 
-iolen=send_efs_cmd(EFS2_DIAG_PREP_FACT_IMAGE,0,0,&lerrno);
+iolen = send_efs_cmd(EFS2_DIAG_PREP_FACT_IMAGE, 0, 0, &lerrno);
 if (iolen == -1) return -1;
-efs_errno=lerrno;
-return lerrno;  
+efs_errno = lerrno;
+return lerrno;
 }
 
 //******************************************************
-//* Запуск чтения полного дампа EFS
+//* Start reading the full EFS dump
 //******************************************************
 int efs_factimage_start() {
 
 int iolen;
 int lerrno;
 
-iolen=send_efs_cmd(EFS2_DIAG_FACT_IMAGE_START,0,0,&lerrno);
+iolen = send_efs_cmd(EFS2_DIAG_FACT_IMAGE_START, 0, 0, &lerrno);
 if (iolen == -1) return -1;
-efs_errno=lerrno;
-return lerrno;  
+efs_errno = lerrno;
+return lerrno;
 }
 
 //******************************************************
-//* Чтение очередного сегмента  EFS
+//* Read the next segment of EFS
 //******************************************************
-int efs_factimage_read(int state, int sent, int map, int data, struct efs_factimage_rsp* rsp) {  
+int efs_factimage_read(int state, int sent, int map, int data, struct efs_factimage_rsp* rsp) {
 
 struct {
   int8 stream_state;        /* Initialize to 0 */
@@ -360,28 +359,26 @@ struct {
 
 int iolen;
 
-req.stream_state=state;
-req.info_cluster_sent=sent;
-req.cluster_map_seqno=map;
-req.cluster_data_seqno=data;
-iolen=send_efs_cmd(EFS2_DIAG_FACT_IMAGE_READ,&req,sizeof(req),rsp);
+req.stream_state = state;
+req.info_cluster_sent = sent;
+req.cluster_map_seqno = map;
+req.cluster_data_seqno = data;
+iolen = send_efs_cmd(EFS2_DIAG_FACT_IMAGE_READ, &req, sizeof(req), rsp);
 if (iolen == -1) return -1;
-efs_errno=rsp->diag_errno;
-return efs_errno;  
+efs_errno = rsp->diag_errno;
+return efs_errno;
 }
 
 //******************************************************
-//* Завершение дампа EFS
+//* Finish the EFS dump
 //******************************************************
 int efs_factimage_end() {
 
 int iolen;
 int lerrno;
 
-iolen=send_efs_cmd(EFS2_DIAG_FACT_IMAGE_END,0,0,&lerrno);
+iolen = send_efs_cmd(EFS2_DIAG_FACT_IMAGE_END, 0, 0, &lerrno);
 if (iolen == -1) return -1;
-efs_errno=lerrno;
-return lerrno;  
+efs_errno = lerrno;
+return lerrno;
 }
-
-
