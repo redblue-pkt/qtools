@@ -1,16 +1,15 @@
-Данные загрузчики имеют в себе всего 1 патч - команда 11 (exec), вместо нее раньше была тупая заглушка power off not supported.
-Формат команды:
+These bootloaders contain only 1 patch - command 11 (exec), instead of which there used to be a dumb power-off not supported placeholder.
+The command format is:
 
-11 00 <вплоть до 1020 байт выполняеемой программы>
+11 00 <up to 1020 bytes of the program to be executed>
 
-Управление передается на самый нулевой байт программы в режиме ARM. Регистры на входе:
+Control is passed to the very first byte of the program in ARM mode. The input registers are:
 
-R0 - адрес запуска программы
-R1 - адрес ответного буфера
+R0 - the address of the program to run
+R1 - the address of the response buffer
 
-Программа может заполнить до 1020 байт в ответном буфере. Регистры на выходе:
+The program can fill up to 1020 bytes in the response buffer. The output registers are:
 
-R4 - число байт, помещенных в ответный буфер.
+R4 - the number of bytes placed in the response buffer.
 
-
-Исходные тексты патчей лежат в файлах pexec_*.asm
+The original patch source texts are located in the files pexec_*.asm.

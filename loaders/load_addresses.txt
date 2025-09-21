@@ -1,6 +1,6 @@
-Адреса загрузки загрузчиков для различных чипсетов
-(в hex, именно так адрес указывается в ключе -a программы qdload):
-
+The loading addresses for loaders for various chipsets
+(in hexadecimal format, as specified in the -a key of the 'qdload' program)
+are as follows:
 
 
 NPRG8200   00100000
